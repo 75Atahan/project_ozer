@@ -114,7 +114,7 @@ async function loadQuake() {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
-    const list = (data.earthquakes || []).slice(0, 8);
+    const list = (data.result || []).slice(0, 8);
     if (list.length === 0) {
       el.className = '';
       el.textContent = 'Son 24 saatte kayıtlı deprem yok.';
@@ -123,10 +123,13 @@ async function loadQuake() {
 
     el.className = '';
     el.innerHTML = list.map((q) => {
-      const mag = parseFloat(q.mag);
-      const big = mag >= 4 ? ' style="color:#C4553B;font-weight:700;"' : '';
+      const time = (q.date_time || '').split(' ')[1] || '';
+      const place = (q.location_properties && q.location_properties.closestCity)
+        ? q.location_properties.closestCity.name
+        : '';
+      const big = q.mag >= 4 ? ' style="color:#C4553B;font-weight:700;"' : '';
       return `<div class="fin-row">
-        <span class="fin-name">${q.location}, ${q.city} · ${q.time}</span>
+        <span class="fin-name">${q.title}${place ? ' · ' + place : ''} · ${time}</span>
         <span class="fin-val"${big}>${q.mag}</span>
       </div>`;
     }).join('');

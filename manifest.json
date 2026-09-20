@@ -1,0 +1,17 @@
+{
+  "name": "LSÖ — Gündelik Asistan",
+  "short_name": "LSÖ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B1F30",
+  "theme_color": "#12324A",
+  "description": "Hava, deniz, finans ve hobi odaklı gündelik asistan",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

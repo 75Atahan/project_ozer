@@ -20,6 +20,8 @@ async function loadAll() {
   loadWeather();
   loadMarine();
   loadFinance();
+  loadQuake();
+  loadNews();
 }
 
 async function loadWeather() {
@@ -100,6 +102,66 @@ async function loadFinance() {
   } catch (err) {
     el.className = 'error';
     el.textContent = 'Finans verisi alınamadı: ' + err.message;
+  }
+}
+
+async function loadQuake() {
+  const el = document.getElementById('quakeBody');
+  el.className = 'skel';
+  el.textContent = 'Yükleniyor…';
+  try {
+    const res = await fetch('/api/quake');
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    const list = (data.earthquakes || []).slice(0, 8);
+    if (list.length === 0) {
+      el.className = '';
+      el.textContent = 'Son 24 saatte kayıtlı deprem yok.';
+      return;
+    }
+
+    el.className = '';
+    el.innerHTML = list.map((q) => {
+      const mag = parseFloat(q.mag);
+      const big = mag >= 4 ? ' style="color:#C4553B;font-weight:700;"' : '';
+      return `<div class="fin-row">
+        <span class="fin-name">${q.location}, ${q.city} · ${q.time}</span>
+        <span class="fin-val"${big}>${q.mag}</span>
+      </div>`;
+    }).join('');
+  } catch (err) {
+    el.className = 'error';
+    el.textContent = 'Deprem verisi alınamadı: ' + err.message;
+  }
+}
+
+async function loadNews() {
+  const el = document.getElementById('newsBody');
+  el.className = 'skel';
+  el.textContent = 'Yükleniyor…';
+  try {
+    const res = await fetch('/api/news');
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    if (data.length === 0) {
+      el.className = '';
+      el.textContent = 'Haber bulunamadı.';
+      return;
+    }
+
+    el.className = '';
+    el.innerHTML = data.slice(0, 6).map((n) => `
+      <div class="fin-row" style="display:block;">
+        <a href="${n.link}" target="_blank" rel="noopener" style="color:inherit; text-decoration:none; font-size:13px;">
+          ${n.title}
+        </a>
+      </div>
+    `).join('');
+  } catch (err) {
+    el.className = 'error';
+    el.textContent = 'Haber verisi alınamadı: ' + err.message;
   }
 }
 

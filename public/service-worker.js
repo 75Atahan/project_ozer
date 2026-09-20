@@ -1,4 +1,4 @@
-const CACHE_NAME = 'lso-v1';
+const CACHE_NAME = 'lso-v3';
 const APP_SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', (event) => {

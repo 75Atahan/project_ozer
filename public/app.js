@@ -110,14 +110,14 @@ async function loadQuake() {
   el.className = 'skel';
   el.textContent = 'Yükleniyor…';
   try {
-    const res = await fetch('/api/quake');
+    const res = await fetch(`/api/quake?lat=${current.lat}&lon=${current.lon}&radius=250`);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
     const list = (data.result || []).slice(0, 8);
     if (list.length === 0) {
       el.className = '';
-      el.textContent = 'Son 24 saatte kayıtlı deprem yok.';
+      el.textContent = 'Bölgende son 24 saatte kayıtlı deprem yok.';
       return;
     }
 
@@ -139,12 +139,12 @@ async function loadQuake() {
   }
 }
 
-async function loadNews() {
-  const el = document.getElementById('newsBody');
+async function loadNewsCategory(category, elId) {
+  const el = document.getElementById(elId);
   el.className = 'skel';
   el.textContent = 'Yükleniyor…';
   try {
-    const res = await fetch('/api/news');
+    const res = await fetch(`/api/news?category=${category}`);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
@@ -168,6 +168,76 @@ async function loadNews() {
   }
 }
 
+async function loadNews() {
+  loadNewsCategory('genel', 'newsBody');
+  loadNewsCategory('spor', 'sportsBody');
+}
+
+// ---- Ödemelerim (cihazda saklanır, sunucuya gitmez) ----
+const PAY_KEY = 'lso_payments';
+
+function getPayments() {
+  try {
+    return JSON.parse(localStorage.getItem(PAY_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function savePayments(list) {
+  try {
+    localStorage.setItem(PAY_KEY, JSON.stringify(list));
+  } catch {}
+}
+
+function addPayment() {
+  const nameEl = document.getElementById('payName');
+  const dateEl = document.getElementById('payDate');
+  const name = nameEl.value.trim();
+  const date = dateEl.value;
+  if (!name || !date) return;
+
+  const list = getPayments();
+  list.push({ id: Date.now(), name, date });
+  savePayments(list);
+  nameEl.value = '';
+  dateEl.value = '';
+  renderPayments();
+}
+
+function removePayment(id) {
+  const list = getPayments().filter((p) => p.id !== id);
+  savePayments(list);
+  renderPayments();
+}
+
+function renderPayments() {
+  const el = document.getElementById('paymentsBody');
+  const list = getPayments().sort((a, b) => a.date.localeCompare(b.date));
+
+  if (list.length === 0) {
+    el.className = 'skel';
+    el.textContent = 'Henüz ödeme eklenmedi.';
+    return;
+  }
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  el.className = '';
+  el.innerHTML = list.map((p) => {
+    const daysLeft = Math.ceil((new Date(p.date) - new Date(todayStr)) / 86400000);
+    let info = `${daysLeft} gün kaldı`;
+    let color = 'var(--ink)';
+    if (daysLeft < 0) { info = `${Math.abs(daysLeft)} gün gecikti`; color = '#C4553B'; }
+    else if (daysLeft === 0) { info = 'Bugün'; color = '#D98F2B'; }
+    else if (daysLeft <= 3) { color = '#D98F2B'; }
+    return `<div class="fin-row">
+      <span class="fin-name">${p.name} <span style="color:var(--ink-soft);">· ${p.date}</span></span>
+      <span class="fin-val" style="color:${color};">${info}</span>
+      <span onclick="removePayment(${p.id})" style="margin-left:8px; cursor:pointer; color:var(--ink-soft);">✕</span>
+    </div>`;
+  }).join('');
+}
+
 document.getElementById('presetRow').addEventListener('click', (e) => {
   const btn = e.target.closest('.preset');
   if (!btn) return;
@@ -179,6 +249,7 @@ document.getElementById('presetRow').addEventListener('click', (e) => {
 
 document.querySelector('.preset').classList.add('active');
 loadAll();
+renderPayments();
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

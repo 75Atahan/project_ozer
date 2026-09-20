@@ -71,6 +71,59 @@ app.get('/api/finance', async (req, res) => {
   }
 });
 
+// ---- Deprem (Kandilli tabanlı, açık kaynak, key gerekmiyor) ----
+app.get('/api/quake', async (req, res) => {
+  try {
+    const data = await cachedFetch(
+      'quake:last24h',
+      'https://api.hknsoft.com/earthquake/v1/last24hours?limit=30'
+    );
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// ---- Haber (RSS — Hürriyet anasayfa) ----
+function parseRssItems(xml, limit) {
+  const items = [];
+  const itemBlocks = xml.split('<item>').slice(1);
+  for (const block of itemBlocks) {
+    if (items.length >= limit) break;
+    const body = block.split('</item>')[0];
+    const pick = (tag) => {
+      const m = body.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`));
+      if (!m) return '';
+      return m[1].replace('<![CDATA[', '').replace(']]>', '').trim();
+    };
+    items.push({
+      title: pick('title'),
+      link: pick('link'),
+      pubDate: pick('pubDate'),
+    });
+  }
+  return items;
+}
+
+app.get('/api/news', async (req, res) => {
+  try {
+    const cacheKey = 'news:hurriyet';
+    const hit = cache.get(cacheKey);
+    const now = Date.now();
+    if (hit && now - hit.time < CACHE_MS) return res.json(hit.data);
+
+    const r = await fetch('https://www.hurriyet.com.tr/rss/anasayfa');
+    if (!r.ok) throw new Error(`Upstream hata: ${r.status}`);
+    const xml = await r.text();
+    const items = parseRssItems(xml, 10);
+
+    cache.set(cacheKey, { time: now, data: items });
+    res.json(items);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
 // ---- Statik dosyalar (PWA frontend) ----
 app.use(express.static(path.join(__dirname, 'public')));
 

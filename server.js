@@ -17,11 +17,18 @@ async function cachedFetch(key, url) {
   const hit = cache.get(key);
   if (hit && now - hit.time < CACHE_MS) return hit.data;
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Upstream hata: ${res.status} — ${url}`);
-  const data = await res.json();
-  cache.set(key, { time: now, data });
-  return data;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Upstream hata: ${res.status} — ${url}`);
+    const data = await res.json();
+    cache.set(key, { time: now, data });
+    return data;
+  } catch (err) {
+    // Ağ/upstream hatası olursa, elimizde eski de olsa bir veri varsa onu göster —
+    // boş hata ekranı yerine bayat veri kullanıcı için daha iyi bir deneyim.
+    if (hit) return hit.data;
+    throw err;
+  }
 }
 
 // ---- Hava Durumu (Open-Meteo, key gerekmiyor) ----
@@ -72,19 +79,48 @@ app.get('/api/finance', async (req, res) => {
 });
 
 // ---- Deprem (Kandilli tabanlı, açık kaynak, key gerekmiyor) ----
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 app.get('/api/quake', async (req, res) => {
   try {
     const data = await cachedFetch(
       'quake:last24h',
-      'https://api.orhanaydogdu.com.tr/deprem/kandilli/live?limit=30'
+      'https://api.orhanaydogdu.com.tr/deprem/kandilli/live?limit=100'
     );
-    res.json(data);
+
+    const { lat, lon, radius } = req.query;
+    let result = data.result || [];
+
+    if (lat && lon) {
+      const uLat = parseFloat(lat);
+      const uLon = parseFloat(lon);
+      const maxKm = radius ? parseFloat(radius) : 250;
+      result = result.filter((q) => {
+        const [qLon, qLat] = q.geojson.coordinates;
+        return haversineKm(uLat, uLon, qLat, qLon) <= maxKm;
+      });
+    }
+
+    res.json({ ...data, result });
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
 });
 
-// ---- Haber (RSS — Hürriyet anasayfa) ----
+// ---- Haber (Google News RSS — kategoriye göre) ----
+const NEWS_FEEDS = {
+  genel: 'https://news.google.com/rss?hl=tr&gl=TR&ceid=TR:tr',
+  spor: 'https://news.google.com/rss/headlines/section/topic/SPORTS?hl=tr&gl=TR&ceid=TR:tr',
+};
+
 function parseRssItems(xml, limit) {
   const items = [];
   const itemBlocks = xml.split('<item>').slice(1);
@@ -107,12 +143,13 @@ function parseRssItems(xml, limit) {
 
 app.get('/api/news', async (req, res) => {
   try {
-    const cacheKey = 'news:hurriyet';
+    const category = NEWS_FEEDS[req.query.category] ? req.query.category : 'genel';
+    const cacheKey = `news:${category}`;
     const hit = cache.get(cacheKey);
     const now = Date.now();
     if (hit && now - hit.time < CACHE_MS) return res.json(hit.data);
 
-    const r = await fetch('https://www.hurriyet.com.tr/rss/anasayfa', {
+    const r = await fetch(NEWS_FEEDS[category], {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
         'Accept': 'application/rss+xml, application/xml, text/xml, */*',

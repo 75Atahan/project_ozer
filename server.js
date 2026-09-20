@@ -76,7 +76,7 @@ app.get('/api/quake', async (req, res) => {
   try {
     const data = await cachedFetch(
       'quake:last24h',
-      'https://api.hknsoft.com/earthquake/v1/last24hours?limit=30'
+      'https://api.orhanaydogdu.com.tr/deprem/kandilli/live?limit=30'
     );
     res.json(data);
   } catch (err) {
@@ -112,7 +112,12 @@ app.get('/api/news', async (req, res) => {
     const now = Date.now();
     if (hit && now - hit.time < CACHE_MS) return res.json(hit.data);
 
-    const r = await fetch('https://www.hurriyet.com.tr/rss/anasayfa');
+    const r = await fetch('https://www.hurriyet.com.tr/rss/anasayfa', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+        'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+      },
+    });
     if (!r.ok) throw new Error(`Upstream hata: ${r.status}`);
     const xml = await r.text();
     const items = parseRssItems(xml, 10);

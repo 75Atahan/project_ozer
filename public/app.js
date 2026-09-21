@@ -22,6 +22,7 @@ async function loadAll() {
   loadFinance();
   loadQuake();
   loadNews();
+  loadNearby();
 }
 
 async function loadWeather() {
@@ -175,6 +176,100 @@ async function loadNews() {
   loadNewsCategory('spor', 'sportsBody');
 }
 
+// ---- Konum Arama ----
+let locSearchTimer = null;
+function onLocSearchInput() {
+  clearTimeout(locSearchTimer);
+  const q = document.getElementById('locSearchInput').value.trim();
+  const resultsEl = document.getElementById('locResults');
+  if (q.length < 2) { resultsEl.innerHTML = ''; return; }
+  locSearchTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      const list = data.results || [];
+      if (list.length === 0) { resultsEl.innerHTML = '<div class="loc-result-empty">Sonuç yok</div>'; return; }
+      resultsEl.innerHTML = list.map((r) => {
+        const label = [r.name, r.admin1, r.country].filter(Boolean).join(', ');
+        return `<div class="loc-result-item" onclick='pickGeocodeResult(${r.latitude}, ${r.longitude}, ${JSON.stringify(label)})'>${label}</div>`;
+      }).join('');
+    } catch {
+      resultsEl.innerHTML = '';
+    }
+  }, 400);
+}
+
+function pickGeocodeResult(lat, lon, name) {
+  current = { lat, lon, name };
+  document.getElementById('locSearchInput').value = '';
+  document.getElementById('locResults').innerHTML = '';
+  document.querySelectorAll('.preset').forEach((b) => b.classList.remove('active'));
+  loadAll();
+}
+
+function useGps() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition((pos) => {
+    current = { lat: pos.coords.latitude, lon: pos.coords.longitude, name: 'Şu anki konumum' };
+    document.querySelectorAll('.preset').forEach((b) => b.classList.remove('active'));
+    loadAll();
+  }, () => {});
+}
+
+// ---- Hobi Seçimi ----
+const HOBBY_KEY = 'lso_hobby';
+function getHobby() {
+  try { return localStorage.getItem(HOBBY_KEY) || 'balikcilik'; } catch { return 'balikcilik'; }
+}
+function setHobby(h) {
+  try { localStorage.setItem(HOBBY_KEY, h); } catch {}
+  renderHobbyChips();
+  const defaultCat = h === 'balikcilik' ? 'eczane' : 'kamp';
+  setNearbyCat(defaultCat);
+}
+function renderHobbyChips() {
+  const h = getHobby();
+  document.querySelectorAll('.hobby-chip').forEach((b) => {
+    b.classList.toggle('active', b.dataset.hobby === h);
+  });
+}
+
+// ---- Yakınımda ----
+let nearbyCat = 'eczane';
+function setNearbyCat(cat) {
+  nearbyCat = cat;
+  document.querySelectorAll('.nb-tab').forEach((b) => b.classList.toggle('active', b.dataset.cat === cat));
+  loadNearby();
+}
+
+async function loadNearby() {
+  const el = document.getElementById('nearbyBody');
+  el.className = 'skel';
+  el.textContent = 'Yükleniyor…';
+  try {
+    const res = await fetch(`/api/nearby?lat=${current.lat}&lon=${current.lon}&category=${nearbyCat}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    if (data.length === 0) {
+      el.className = '';
+      el.textContent = 'Yakında sonuç bulunamadı.';
+      return;
+    }
+
+    el.className = '';
+    el.innerHTML = data.slice(0, 8).map((p) => `
+      <a class="fin-row" style="text-decoration:none; color:inherit;" href="https://www.google.com/maps?q=${p.lat},${p.lon}" target="_blank" rel="noopener">
+        <span class="fin-name">${p.name}</span>
+        <span class="fin-val" style="font-size:12px; color:var(--teal);">Haritada aç →</span>
+      </a>
+    `).join('');
+  } catch (err) {
+    el.className = 'error';
+    el.textContent = 'Yakınımda verisi alınamadı: ' + err.message;
+  }
+}
+
 // ---- Hatırlatmalarım (cihazda saklanır, sunucuya gitmez) ----
 const PAY_KEY = 'lso_payments';
 const TYPE_ICON = { odeme: '💳', dogumgunu: '🎂', diger: '📌' };
@@ -299,6 +394,9 @@ document.getElementById('presetRow').addEventListener('click', (e) => {
 });
 
 document.querySelector('.preset').classList.add('active');
+renderHobbyChips();
+nearbyCat = getHobby() === 'balikcilik' ? 'eczane' : 'kamp';
+document.querySelectorAll('.nb-tab').forEach((b) => b.classList.toggle('active', b.dataset.cat === nearbyCat));
 loadAll();
 renderPayments();
 

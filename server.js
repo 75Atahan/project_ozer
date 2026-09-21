@@ -28,15 +28,17 @@ async function cachedFetch(key, url, options) {
     try {
       data = await tryOnce();
     } catch (firstErr) {
-      // Geçici (429/5xx gibi) hatalarda kısa bekleyip bir kez daha dene
       await new Promise((r) => setTimeout(r, 1500));
-      data = await tryOnce();
+      try {
+        data = await tryOnce();
+      } catch (secondErr) {
+        await new Promise((r) => setTimeout(r, 3000));
+        data = await tryOnce();
+      }
     }
     cache.set(key, { time: now, data });
     return data;
   } catch (err) {
-    // Hâlâ başarısızsa, elimizde eski de olsa bir veri varsa onu göster —
-    // boş hata ekranı yerine bayat veri kullanıcı için daha iyi bir deneyim.
     if (hit) return hit.data;
     throw err;
   }
@@ -56,7 +58,6 @@ app.get('/api/weather', async (req, res) => {
     const data = await cachedFetch(`weather:${lat},${lon}`, url);
     return res.json(data);
   } catch (err) {
-    // Open-Meteo düştüyse, wttr.in'den en azından anlık durumu almayı dene
     try {
       const wUrl = `https://wttr.in/${lat},${lon}?format=j1`;
       const wData = await cachedFetch(`weather-fallback:${lat},${lon}`, wUrl);
@@ -187,6 +188,61 @@ app.get('/api/news', async (req, res) => {
     if (!r.ok) throw new Error(`Upstream hata: ${r.status}`);
     const xml = await r.text();
     const items = parseRssItems(xml, 10);
+
+    cache.set(cacheKey, { time: now, data: items });
+    res.json(items);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// ---- Konum Arama (Open-Meteo Geocoding, key gerekmiyor) ----
+app.get('/api/geocode', async (req, res) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if (q.length < 2) return res.json({ results: [] });
+
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=tr&format=json`;
+    const data = await cachedFetch(`geocode:${q.toLowerCase()}`, url);
+    res.json(data);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// ---- Yakınımda (OpenStreetMap / Overpass API, key gerekmiyor) ----
+const NEARBY_TAGS = {
+  eczane: 'amenity=pharmacy',
+  market: 'shop=supermarket',
+  kamp: 'tourism=camp_site',
+};
+
+app.get('/api/nearby', async (req, res) => {
+  try {
+    const { lat, lon, category } = req.query;
+    if (!lat || !lon) return res.status(400).json({ error: 'lat ve lon zorunlu' });
+    const tag = NEARBY_TAGS[category] || NEARBY_TAGS.eczane;
+    const [key, val] = tag.split('=');
+
+    const cacheKey = `nearby:${category}:${lat},${lon}`;
+    const hit = cache.get(cacheKey);
+    const now = Date.now();
+    if (hit && now - hit.time < CACHE_MS) return res.json(hit.data);
+
+    const query = `[out:json][timeout:15];node["${key}"="${val}"](around:4000,${lat},${lon});out center 8;`;
+    const r = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'data=' + encodeURIComponent(query),
+    });
+    if (!r.ok) throw new Error(`Upstream hata: ${r.status}`);
+    const raw = await r.json();
+
+    const items = (raw.elements || []).map((el) => ({
+      name: (el.tags && el.tags.name) || 'İsimsiz',
+      lat: el.lat,
+      lon: el.lon,
+    })).filter((p) => p.lat && p.lon);
 
     cache.set(cacheKey, { time: now, data: items });
     res.json(items);

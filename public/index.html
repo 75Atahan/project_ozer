@@ -54,13 +54,21 @@
     </section>
 
     <section class="card" id="paymentsCard">
-      <h2>Ödemelerim</h2>
+      <h2>Hatırlatmalarım</h2>
       <div class="payment-form">
-        <input type="text" id="payName" placeholder="Ödeme adı (ör. Kira, Elektrik)">
+        <select id="payType">
+          <option value="odeme">💳 Ödeme</option>
+          <option value="dogumgunu">🎂 Doğum Günü</option>
+          <option value="diger">📌 Diğer</option>
+        </select>
+        <input type="text" id="payName" placeholder="Başlık (ör. Kira, Ayşe'nin doğum günü)">
+        <input type="text" id="payDesc" placeholder="Açıklama (opsiyonel)">
+        <input type="number" id="payAmount" placeholder="Tutar (opsiyonel)">
         <input type="date" id="payDate">
         <button onclick="addPayment()">Ekle</button>
       </div>
-      <div id="paymentsBody" class="skel">Henüz ödeme eklenmedi.</div>
+      <div id="notifyRow" class="notify-row"></div>
+      <div id="paymentsBody" class="skel">Henüz hatırlatma eklenmedi.</div>
     </section>
 
     <footer>

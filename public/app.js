@@ -34,17 +34,19 @@ async function loadWeather() {
     if (data.error) throw new Error(data.error);
 
     const c = data.current;
-    const desc = WEATHER_CODES[c.weather_code] || '—';
+    const desc = c.desc_override || WEATHER_CODES[c.weather_code] || '—';
 
     let daysHtml = '';
-    data.daily.time.forEach((dateStr, i) => {
-      if (i > 3) return;
-      const d = new Date(dateStr);
-      const label = i === 0 ? 'Bugün' : DAY_NAMES[d.getDay()];
-      const max = Math.round(data.daily.temperature_2m_max[i]);
-      const wind = Math.round(data.daily.wind_speed_10m_max[i]);
-      daysHtml += `<div class="day">${label}<b>${max}°</b>🌬 ${wind}</div>`;
-    });
+    if (data.daily && data.daily.time) {
+      data.daily.time.forEach((dateStr, i) => {
+        if (i > 3) return;
+        const d = new Date(dateStr);
+        const label = i === 0 ? 'Bugün' : DAY_NAMES[d.getDay()];
+        const max = Math.round(data.daily.temperature_2m_max[i]);
+        const wind = Math.round(data.daily.wind_speed_10m_max[i]);
+        daysHtml += `<div class="day">${label}<b>${max}°</b>🌬 ${wind}</div>`;
+      });
+    }
 
     el.className = '';
     el.innerHTML = `
@@ -52,7 +54,7 @@ async function loadWeather() {
         <span class="wx-temp">${Math.round(c.temperature_2m)}°</span>
         <span class="wx-desc">${desc} · Rüzgar ${Math.round(c.wind_speed_10m)} km/s</span>
       </div>
-      <div class="day-row">${daysHtml}</div>
+      ${daysHtml ? `<div class="day-row">${daysHtml}</div>` : '<div style="font-size:11.5px; color:var(--ink-soft);">4 günlük tahmin şu an mevcut değil, sadece anlık durum gösteriliyor.</div>'}
     `;
   } catch (err) {
     el.className = 'error';
@@ -173,8 +175,9 @@ async function loadNews() {
   loadNewsCategory('spor', 'sportsBody');
 }
 
-// ---- Ödemelerim (cihazda saklanır, sunucuya gitmez) ----
+// ---- Hatırlatmalarım (cihazda saklanır, sunucuya gitmez) ----
 const PAY_KEY = 'lso_payments';
+const TYPE_ICON = { odeme: '💳', dogumgunu: '🎂', diger: '📌' };
 
 function getPayments() {
   try {
@@ -191,16 +194,29 @@ function savePayments(list) {
 }
 
 function addPayment() {
+  const typeEl = document.getElementById('payType');
   const nameEl = document.getElementById('payName');
+  const descEl = document.getElementById('payDesc');
+  const amountEl = document.getElementById('payAmount');
   const dateEl = document.getElementById('payDate');
+
   const name = nameEl.value.trim();
   const date = dateEl.value;
   if (!name || !date) return;
 
   const list = getPayments();
-  list.push({ id: Date.now(), name, date });
+  list.push({
+    id: Date.now(),
+    type: typeEl.value,
+    name,
+    desc: descEl.value.trim(),
+    amount: amountEl.value ? parseFloat(amountEl.value) : null,
+    date,
+  });
   savePayments(list);
   nameEl.value = '';
+  descEl.value = '';
+  amountEl.value = '';
   dateEl.value = '';
   renderPayments();
 }
@@ -211,13 +227,42 @@ function removePayment(id) {
   renderPayments();
 }
 
+function notifyToday(list) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  list.filter((p) => p.date === todayStr).forEach((p) => {
+    new Notification(`${TYPE_ICON[p.type] || '📌'} ${p.name}`, {
+      body: p.desc || 'Bugün hatırlatman var.',
+      icon: '/icon.svg',
+    });
+  });
+}
+
+function renderNotifyRow() {
+  const el = document.getElementById('notifyRow');
+  if (!('Notification' in window)) { el.innerHTML = ''; return; }
+  if (Notification.permission === 'granted') {
+    el.innerHTML = '<span class="notify-ok">🔔 Bildirimler açık — o gün geldiğinde, uygulamayı açtığında hatırlatılacaksın.</span>';
+    return;
+  }
+  el.innerHTML = '<button class="notify-btn" onclick="askNotifyPermission()">🔔 Gün geldiğinde hatırlatsın (bildirim izni ver)</button>';
+}
+
+function askNotifyPermission() {
+  if (!('Notification' in window)) return;
+  Notification.requestPermission().then(() => renderNotifyRow());
+}
+
 function renderPayments() {
   const el = document.getElementById('paymentsBody');
   const list = getPayments().sort((a, b) => a.date.localeCompare(b.date));
 
+  renderNotifyRow();
+  notifyToday(list);
+
   if (list.length === 0) {
     el.className = 'skel';
-    el.textContent = 'Henüz ödeme eklenmedi.';
+    el.textContent = 'Henüz hatırlatma eklenmedi.';
     return;
   }
 
@@ -230,10 +275,16 @@ function renderPayments() {
     if (daysLeft < 0) { info = `${Math.abs(daysLeft)} gün gecikti`; color = '#C4553B'; }
     else if (daysLeft === 0) { info = 'Bugün'; color = '#D98F2B'; }
     else if (daysLeft <= 3) { color = '#D98F2B'; }
-    return `<div class="fin-row">
-      <span class="fin-name">${p.name} <span style="color:var(--ink-soft);">· ${p.date}</span></span>
-      <span class="fin-val" style="color:${color};">${info}</span>
-      <span onclick="removePayment(${p.id})" style="margin-left:8px; cursor:pointer; color:var(--ink-soft);">✕</span>
+    const amountTxt = (p.amount !== null && p.amount !== undefined && !isNaN(p.amount)) ? ` · ${p.amount} ₺` : '';
+    const descTxt = p.desc ? `<br><span style="color:var(--ink-soft); font-size:11.5px;">${p.desc}</span>` : '';
+    return `<div class="fin-row" style="align-items:flex-start;">
+      <span class="fin-name">${TYPE_ICON[p.type] || '📌'} ${p.name}${amountTxt}
+        <span style="color:var(--ink-soft);"> · ${p.date}</span>${descTxt}
+      </span>
+      <span style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+        <span class="fin-val" style="color:${color};">${info}</span>
+        <span onclick="removePayment(${p.id})" style="cursor:pointer; color:var(--ink-soft);">✕</span>
+      </span>
     </div>`;
   }).join('');
 }

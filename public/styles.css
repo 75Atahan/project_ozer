@@ -80,3 +80,61 @@ footer{text-align:center; font-size:11px; color:var(--ink-soft); margin-top:18px
   padding:8px 12px; font-size:12px; font-weight:600; cursor:pointer;
 }
 .notify-ok{font-size:11.5px; color:var(--teal);}
+
+/* ---- Konum arama ---- */
+.loc-search-wrap{position:relative; margin-bottom:14px;}
+.loc-search{
+  display:flex; gap:8px; align-items:center;
+  background:var(--card); border:1px solid var(--line); border-radius:12px;
+  padding:6px 8px 6px 14px;
+}
+.loc-search input{
+  flex:1; border:none; outline:none; background:transparent;
+  font-size:13px; font-family:'IBM Plex Sans', sans-serif; padding:8px 0;
+}
+.gps-btn{
+  border:none; background:rgba(31,111,114,0.12); border-radius:9px;
+  width:34px; height:34px; font-size:15px; cursor:pointer;
+}
+.loc-results{
+  position:absolute; left:0; right:0; top:calc(100% + 4px);
+  background:var(--card); border:1px solid var(--line); border-radius:12px;
+  overflow:hidden; z-index:5;
+}
+.loc-result-item{padding:10px 14px; font-size:12.5px; cursor:pointer; border-bottom:1px solid var(--line);}
+.loc-result-item:last-child{border-bottom:none;}
+.loc-result-item:hover{background:rgba(31,111,114,0.06);}
+.loc-result-empty{padding:10px 14px; font-size:12px; color:var(--ink-soft);}
+
+/* ---- Hobi seçimi ---- */
+.hobby-row{display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap;}
+.hobby-label{font-size:12px; color:var(--ink-soft); font-weight:600;}
+.hobby-chip{
+  border:1px solid var(--line); background:var(--card); border-radius:100px;
+  padding:7px 12px; font-size:12px; cursor:pointer; color:var(--ink-soft);
+}
+.hobby-chip.active{background:var(--amber); color:#fff; border-color:var(--amber);}
+
+/* ---- Yakınımda ---- */
+.nearby-tabs{display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap;}
+.nb-tab{
+  border:1px solid var(--line); background:transparent; border-radius:100px;
+  padding:6px 11px; font-size:11.5px; cursor:pointer; color:var(--ink-soft);
+}
+.nb-tab.active{background:var(--teal); color:#fff; border-color:var(--teal);}
+
+/* ---- Duyarlı (responsive) düzen ---- */
+@media (min-width: 760px){
+  .app{max-width:960px; padding:32px 32px 60px;}
+  .grid-wrap{
+    display:grid;
+    grid-template-columns:repeat(2, 1fr);
+    gap:14px;
+    align-items:start;
+  }
+  .grid-wrap .card{margin-bottom:0;}
+}
+@media (min-width: 1100px){
+  .app{max-width:1200px;}
+  .grid-wrap{grid-template-columns:repeat(3, 1fr);}
+}

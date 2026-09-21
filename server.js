@@ -12,40 +12,69 @@ const PORT = process.env.PORT || 3000;
 const cache = new Map();
 const CACHE_MS = 10 * 60 * 1000; // 10 dakika
 
-async function cachedFetch(key, url) {
+async function cachedFetch(key, url, options) {
   const now = Date.now();
   const hit = cache.get(key);
   if (hit && now - hit.time < CACHE_MS) return hit.data;
 
-  try {
-    const res = await fetch(url);
+  const tryOnce = async () => {
+    const res = await fetch(url, options);
     if (!res.ok) throw new Error(`Upstream hata: ${res.status} — ${url}`);
-    const data = await res.json();
+    return res.json();
+  };
+
+  try {
+    let data;
+    try {
+      data = await tryOnce();
+    } catch (firstErr) {
+      // Geçici (429/5xx gibi) hatalarda kısa bekleyip bir kez daha dene
+      await new Promise((r) => setTimeout(r, 1500));
+      data = await tryOnce();
+    }
     cache.set(key, { time: now, data });
     return data;
   } catch (err) {
-    // Ağ/upstream hatası olursa, elimizde eski de olsa bir veri varsa onu göster —
+    // Hâlâ başarısızsa, elimizde eski de olsa bir veri varsa onu göster —
     // boş hata ekranı yerine bayat veri kullanıcı için daha iyi bir deneyim.
     if (hit) return hit.data;
     throw err;
   }
 }
 
-// ---- Hava Durumu (Open-Meteo, key gerekmiyor) ----
+// ---- Hava Durumu (Open-Meteo, key gerekmiyor) — düşerse wttr.in'e yedeklenir ----
 app.get('/api/weather', async (req, res) => {
-  try {
-    const { lat, lon } = req.query;
-    if (!lat || !lon) return res.status(400).json({ error: 'lat ve lon zorunlu' });
+  const { lat, lon } = req.query;
+  if (!lat || !lon) return res.status(400).json({ error: 'lat ve lon zorunlu' });
 
+  try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
       `&current=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code` +
       `&daily=temperature_2m_max,temperature_2m_min,weather_code,wind_speed_10m_max` +
       `&timezone=Europe%2FIstanbul&forecast_days=4`;
 
     const data = await cachedFetch(`weather:${lat},${lon}`, url);
-    res.json(data);
+    return res.json(data);
   } catch (err) {
-    res.status(502).json({ error: err.message });
+    // Open-Meteo düştüyse, wttr.in'den en azından anlık durumu almayı dene
+    try {
+      const wUrl = `https://wttr.in/${lat},${lon}?format=j1`;
+      const wData = await cachedFetch(`weather-fallback:${lat},${lon}`, wUrl);
+      const cc = wData.current_condition && wData.current_condition[0];
+      if (!cc) throw new Error('Yedek kaynaktan da veri alınamadı');
+
+      return res.json({
+        source: 'wttr-fallback',
+        current: {
+          temperature_2m: parseFloat(cc.temp_C),
+          wind_speed_10m: parseFloat(cc.windspeedKmph),
+          desc_override: cc.weatherDesc && cc.weatherDesc[0] ? cc.weatherDesc[0].value : null,
+        },
+        daily: null,
+      });
+    } catch (fallbackErr) {
+      res.status(502).json({ error: err.message });
+    }
   }
 });
 

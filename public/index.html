@@ -23,6 +23,33 @@
       <button class="preset" data-lat="38.4600" data-lon="27.1200" data-name="Karşıyaka, İzmir">Karşıyaka</button>
     </div>
 
+    <div class="loc-search-wrap">
+      <div class="loc-search">
+        <input type="text" id="locSearchInput" placeholder="Bir yer adı yaz… (ör. Çeşme, Bodrum)" oninput="onLocSearchInput()">
+        <button class="gps-btn" onclick="useGps()" title="Konumumu kullan">📍</button>
+      </div>
+      <div id="locResults" class="loc-results"></div>
+    </div>
+
+    <div class="hobby-row">
+      <span class="hobby-label">Hobim:</span>
+      <button class="hobby-chip" data-hobby="balikcilik" onclick="setHobby('balikcilik')">🎣 Balıkçılık</button>
+      <button class="hobby-chip" data-hobby="karavan" onclick="setHobby('karavan')">🚐 Karavan</button>
+      <button class="hobby-chip" data-hobby="cadir" onclick="setHobby('cadir')">⛺ Çadır</button>
+    </div>
+
+    <section class="card" id="nearbyCard">
+      <h2>Yakınımda</h2>
+      <div class="nearby-tabs" id="nearbyTabs">
+        <button class="nb-tab" data-cat="eczane" onclick="setNearbyCat('eczane')">💊 Eczane</button>
+        <button class="nb-tab" data-cat="market" onclick="setNearbyCat('market')">🛒 Market</button>
+        <button class="nb-tab" data-cat="kamp" onclick="setNearbyCat('kamp')">⛺ Kamp Alanı</button>
+      </div>
+      <div class="skel" id="nearbyBody">Yükleniyor…</div>
+    </section>
+
+    <div class="grid-wrap">
+
     <section class="card" id="weatherCard">
       <h2>Hava Durumu</h2>
       <div class="skel" id="weatherBody">Yükleniyor…</div>
@@ -70,6 +97,7 @@
       <div id="notifyRow" class="notify-row"></div>
       <div id="paymentsBody" class="skel">Henüz hatırlatma eklenmedi.</div>
     </section>
+    </div>
 
     <footer>
       Veriler Open-Meteo ve Darphane açık kaynaklarından canlı çekilir. · LSÖ MVP

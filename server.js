@@ -217,6 +217,30 @@ const NEARBY_TAGS = {
   kamp: 'tourism=camp_site',
 };
 
+const OVERPASS_MIRRORS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.openstreetmap.ru/api/interpreter',
+];
+
+async function queryOverpass(query) {
+  let lastErr;
+  for (const mirror of OVERPASS_MIRRORS) {
+    try {
+      const r = await fetch(mirror, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(query),
+      });
+      if (!r.ok) throw new Error(`Upstream hata: ${r.status} (${mirror})`);
+      return await r.json();
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+}
+
 app.get('/api/nearby', async (req, res) => {
   try {
     const { lat, lon, category } = req.query;
@@ -229,14 +253,15 @@ app.get('/api/nearby', async (req, res) => {
     const now = Date.now();
     if (hit && now - hit.time < CACHE_MS) return res.json(hit.data);
 
-    const query = `[out:json][timeout:15];node["${key}"="${val}"](around:4000,${lat},${lon});out center 8;`;
-    const r = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'data=' + encodeURIComponent(query),
-    });
-    if (!r.ok) throw new Error(`Upstream hata: ${r.status}`);
-    const raw = await r.json();
+    const query = `[out:json][timeout:20];node["${key}"="${val}"](around:4000,${lat},${lon});out center 8;`;
+
+    let raw;
+    try {
+      raw = await queryOverpass(query);
+    } catch (err) {
+      if (hit) return res.json(hit.data);
+      throw err;
+    }
 
     const items = (raw.elements || []).map((el) => ({
       name: (el.tags && el.tags.name) || 'İsimsiz',

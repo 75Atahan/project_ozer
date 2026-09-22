@@ -17,18 +17,13 @@
       <div id="locLabel" class="loc-label">Mordoğan, İzmir</div>
     </header>
 
-    <div class="preset-row" id="presetRow">
-      <button class="preset" data-lat="38.5182" data-lon="26.6267" data-name="Mordoğan, İzmir">Mordoğan</button>
-      <button class="preset" data-lat="38.6674" data-lon="26.7535" data-name="Eski Foça, İzmir">Eski Foça</button>
-      <button class="preset" data-lat="38.4600" data-lon="27.1200" data-name="Karşıyaka, İzmir">Karşıyaka</button>
-    </div>
-
     <div class="loc-search-wrap">
       <div class="loc-search">
         <input type="text" id="locSearchInput" placeholder="Bir yer adı yaz… (ör. Çeşme, Bodrum)" oninput="onLocSearchInput()">
         <button class="gps-btn" onclick="useGps()" title="Konumumu kullan">📍</button>
       </div>
       <div id="locResults" class="loc-results"></div>
+      <div class="recent-row" id="recentRow"></div>
     </div>
 
     <div class="hobby-row">
@@ -37,6 +32,12 @@
       <button class="hobby-chip" data-hobby="karavan" onclick="setHobby('karavan')">🚐 Karavan</button>
       <button class="hobby-chip" data-hobby="cadir" onclick="setHobby('cadir')">⛺ Çadır</button>
     </div>
+
+    <div id="hobbyGate" class="hobby-gate">
+      <div class="hobby-gate-text">Devam etmek için önce yukarıdan bir hobi seç 👆</div>
+    </div>
+
+    <div id="mainContent" style="display:none;">
 
     <section class="card" id="nearbyCard">
       <h2>Yakınımda</h2>
@@ -97,6 +98,7 @@
       <div id="notifyRow" class="notify-row"></div>
       <div id="paymentsBody" class="skel">Henüz hatırlatma eklenmedi.</div>
     </section>
+    </div>
     </div>
 
     <footer>

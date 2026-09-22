@@ -80,7 +80,7 @@ async function loadMarine() {
     `;
   } catch (err) {
     el.className = 'error';
-    el.textContent = 'Bu konum için deniz verisi yok (açık deniz/kıyıya çok uzak olabilir).';
+    el.textContent = 'Deniz verisi alınamadı: ' + err.message;
   }
 }
 
@@ -177,6 +177,37 @@ async function loadNews() {
 }
 
 // ---- Konum Arama ----
+const RECENT_KEY = 'lso_recent_locations';
+
+function getRecents() {
+  try { return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch { return []; }
+}
+function saveRecent(loc) {
+  try {
+    let list = getRecents().filter((r) => r.name !== loc.name);
+    list.unshift(loc);
+    list = list.slice(0, 4);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+    renderRecents();
+  } catch {}
+}
+function renderRecents() {
+  const el = document.getElementById('recentRow');
+  const list = getRecents();
+  if (list.length === 0) { el.innerHTML = ''; return; }
+  el.innerHTML = list.map((r, i) => `
+    <button class="recent-chip ${i === 0 ? 'active' : ''}" onclick='selectRecent(${i})'>${r.name}</button>
+  `).join('');
+}
+function selectRecent(i) {
+  const list = getRecents();
+  const loc = list[i];
+  if (!loc) return;
+  current = { lat: loc.lat, lon: loc.lon, name: loc.name };
+  saveRecent(loc);
+  loadAll();
+}
+
 let locSearchTimer = null;
 function onLocSearchInput() {
   clearTimeout(locSearchTimer);
@@ -203,35 +234,46 @@ function pickGeocodeResult(lat, lon, name) {
   current = { lat, lon, name };
   document.getElementById('locSearchInput').value = '';
   document.getElementById('locResults').innerHTML = '';
-  document.querySelectorAll('.preset').forEach((b) => b.classList.remove('active'));
+  saveRecent({ lat, lon, name });
   loadAll();
 }
 
 function useGps() {
   if (!navigator.geolocation) return;
   navigator.geolocation.getCurrentPosition((pos) => {
-    current = { lat: pos.coords.latitude, lon: pos.coords.longitude, name: 'Şu anki konumum' };
-    document.querySelectorAll('.preset').forEach((b) => b.classList.remove('active'));
+    const loc = { lat: pos.coords.latitude, lon: pos.coords.longitude, name: 'Şu anki konumum' };
+    current = loc;
+    saveRecent(loc);
     loadAll();
   }, () => {});
 }
 
-// ---- Hobi Seçimi ----
+// ---- Hobi Seçimi (zorunlu ilk adım) ----
 const HOBBY_KEY = 'lso_hobby';
 function getHobby() {
-  try { return localStorage.getItem(HOBBY_KEY) || 'balikcilik'; } catch { return 'balikcilik'; }
+  try { return localStorage.getItem(HOBBY_KEY) || null; } catch { return null; }
 }
 function setHobby(h) {
   try { localStorage.setItem(HOBBY_KEY, h); } catch {}
   renderHobbyChips();
+  applyHobbyVisibility();
+  document.getElementById('hobbyGate').style.display = 'none';
+  document.getElementById('mainContent').style.display = 'block';
   const defaultCat = h === 'balikcilik' ? 'eczane' : 'kamp';
-  setNearbyCat(defaultCat);
+  nearbyCat = defaultCat;
+  document.querySelectorAll('.nb-tab').forEach((b) => b.classList.toggle('active', b.dataset.cat === defaultCat));
+  loadAll();
 }
 function renderHobbyChips() {
   const h = getHobby();
   document.querySelectorAll('.hobby-chip').forEach((b) => {
     b.classList.toggle('active', b.dataset.hobby === h);
   });
+}
+function applyHobbyVisibility() {
+  const h = getHobby();
+  const marineCard = document.getElementById('marineCard');
+  marineCard.style.display = (h === 'balikcilik') ? '' : 'none';
 }
 
 // ---- Yakınımda ----
@@ -384,20 +426,23 @@ function renderPayments() {
   }).join('');
 }
 
-document.getElementById('presetRow').addEventListener('click', (e) => {
-  const btn = e.target.closest('.preset');
-  if (!btn) return;
-  document.querySelectorAll('.preset').forEach((b) => b.classList.remove('active'));
-  btn.classList.add('active');
-  current = { lat: parseFloat(btn.dataset.lat), lon: parseFloat(btn.dataset.lon), name: btn.dataset.name };
-  loadAll();
-});
-
-document.querySelector('.preset').classList.add('active');
+// ---- Başlangıç ----
+renderRecents();
 renderHobbyChips();
-nearbyCat = getHobby() === 'balikcilik' ? 'eczane' : 'kamp';
-document.querySelectorAll('.nb-tab').forEach((b) => b.classList.toggle('active', b.dataset.cat === nearbyCat));
-loadAll();
+
+const savedHobby = getHobby();
+if (savedHobby) {
+  applyHobbyVisibility();
+  document.getElementById('hobbyGate').style.display = 'none';
+  document.getElementById('mainContent').style.display = 'block';
+  nearbyCat = savedHobby === 'balikcilik' ? 'eczane' : 'kamp';
+  document.querySelectorAll('.nb-tab').forEach((b) => b.classList.toggle('active', b.dataset.cat === nearbyCat));
+  loadAll();
+} else {
+  document.getElementById('hobbyGate').style.display = 'block';
+  document.getElementById('mainContent').style.display = 'none';
+}
+
 renderPayments();
 
 if ('serviceWorker' in navigator) {

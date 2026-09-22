@@ -21,15 +21,6 @@ header{display:flex; justify-content:space-between; align-items:baseline; margin
 h1{font-family:'Fraunces', serif; font-size:22px; margin:0; color:var(--navy);}
 .loc-label{font-size:13px; color:var(--ink-soft);}
 
-.preset-row{display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap;}
-.preset{
-  border:1px solid var(--line); background:var(--card);
-  border-radius:100px; padding:8px 14px; font-size:12.5px;
-  font-family:'IBM Plex Sans', sans-serif; color:var(--ink-soft);
-  cursor:pointer;
-}
-.preset.active{background:var(--teal); color:#fff; border-color:var(--teal);}
-
 .card{
   background:var(--card); border:1px solid var(--line); border-radius:16px;
   padding:16px 18px; margin-bottom:14px;
@@ -122,6 +113,22 @@ footer{text-align:center; font-size:11px; color:var(--ink-soft); margin-top:18px
   padding:6px 11px; font-size:11.5px; cursor:pointer; color:var(--ink-soft);
 }
 .nb-tab.active{background:var(--teal); color:#fff; border-color:var(--teal);}
+
+/* ---- Son kullanılan konumlar ---- */
+.recent-row{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;}
+.recent-chip{
+  border:1px solid var(--line); background:var(--card); border-radius:100px;
+  padding:6px 12px; font-size:12px; color:var(--ink-soft); cursor:pointer;
+}
+.recent-chip.active{background:var(--teal); color:#fff; border-color:var(--teal);}
+
+/* ---- Hobi kapısı ---- */
+.hobby-gate{
+  display:none; text-align:center; padding:28px 16px;
+  background:var(--card); border:1px dashed var(--line); border-radius:16px;
+  margin-bottom:16px;
+}
+.hobby-gate-text{font-size:13.5px; color:var(--ink-soft); font-family:'Fraunces', serif;}
 
 /* ---- Duyarlı (responsive) düzen ---- */
 @media (min-width: 760px){

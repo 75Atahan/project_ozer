@@ -8,6 +8,8 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const DEFAULT_HEADERS = { 'User-Agent': 'LSO-App/1.0 (kisisel-gundelik-asistan)' };
+
 // Basit bellek içi cache (aynı sorguyu API'ye her seferinde atmamak için)
 const cache = new Map();
 const CACHE_MS = 10 * 60 * 1000; // 10 dakika
@@ -55,14 +57,23 @@ app.get('/api/weather', async (req, res) => {
       `&daily=temperature_2m_max,temperature_2m_min,weather_code,wind_speed_10m_max` +
       `&timezone=Europe%2FIstanbul&forecast_days=4`;
 
-    const data = await cachedFetch(`weather:${lat},${lon}`, url);
+    const data = await cachedFetch(`weather:${lat},${lon}`, url, { headers: DEFAULT_HEADERS });
     return res.json(data);
   } catch (err) {
+    // Open-Meteo düştüyse, wttr.in'den en azından anlık durumu almayı dene
     try {
       const wUrl = `https://wttr.in/${lat},${lon}?format=j1`;
-      const wData = await cachedFetch(`weather-fallback:${lat},${lon}`, wUrl);
+      const wData = await cachedFetch(`weather-fallback:${lat},${lon}`, wUrl, { headers: DEFAULT_HEADERS });
       const cc = wData.current_condition && wData.current_condition[0];
       if (!cc) throw new Error('Yedek kaynaktan da veri alınamadı');
+
+      const daily = { time: [], temperature_2m_max: [], wind_speed_10m_max: [] };
+      (wData.weather || []).forEach((day) => {
+        daily.time.push(day.date);
+        daily.temperature_2m_max.push(parseFloat(day.maxtempC));
+        const winds = (day.hourly || []).map((h) => parseFloat(h.windspeedKmph));
+        daily.wind_speed_10m_max.push(winds.length ? Math.max(...winds) : 0);
+      });
 
       return res.json({
         source: 'wttr-fallback',
@@ -71,7 +82,7 @@ app.get('/api/weather', async (req, res) => {
           wind_speed_10m: parseFloat(cc.windspeedKmph),
           desc_override: cc.weatherDesc && cc.weatherDesc[0] ? cc.weatherDesc[0].value : null,
         },
-        daily: null,
+        daily: daily.time.length ? daily : null,
       });
     } catch (fallbackErr) {
       res.status(502).json({ error: err.message });
@@ -88,7 +99,7 @@ app.get('/api/marine', async (req, res) => {
     const url = `https://marine-api.open-meteo.com/v1/marine?latitude=${lat}&longitude=${lon}` +
       `&current=wave_height,wave_period&timezone=Europe%2FIstanbul`;
 
-    const data = await cachedFetch(`marine:${lat},${lon}`, url);
+    const data = await cachedFetch(`marine:${lat},${lon}`, url, { headers: DEFAULT_HEADERS });
     res.json(data);
   } catch (err) {
     res.status(502).json({ error: err.message });
@@ -203,7 +214,7 @@ app.get('/api/geocode', async (req, res) => {
     if (q.length < 2) return res.json({ results: [] });
 
     const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=tr&format=json`;
-    const data = await cachedFetch(`geocode:${q.toLowerCase()}`, url);
+    const data = await cachedFetch(`geocode:${q.toLowerCase()}`, url, { headers: DEFAULT_HEADERS });
     res.json(data);
   } catch (err) {
     res.status(502).json({ error: err.message });
@@ -215,6 +226,7 @@ const NEARBY_TAGS = {
   eczane: 'amenity=pharmacy',
   market: 'shop=supermarket',
   kamp: 'tourism=camp_site',
+  balik: 'leisure=fishing',
 };
 
 const OVERPASS_MIRRORS = [
@@ -227,10 +239,9 @@ async function queryOverpass(query) {
   let lastErr;
   for (const mirror of OVERPASS_MIRRORS) {
     try {
-      const r = await fetch(mirror, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'data=' + encodeURIComponent(query),
+      const url = `${mirror}?data=${encodeURIComponent(query)}`;
+      const r = await fetch(url, {
+        headers: { 'User-Agent': 'LSO-App/1.0 (kisisel-gundelik-asistan)' },
       });
       if (!r.ok) throw new Error(`Upstream hata: ${r.status} (${mirror})`);
       return await r.json();

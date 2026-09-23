@@ -259,7 +259,7 @@ function setHobby(h) {
   applyHobbyVisibility();
   document.getElementById('hobbyGate').style.display = 'none';
   document.getElementById('mainContent').style.display = 'block';
-  const defaultCat = h === 'balikcilik' ? 'eczane' : 'kamp';
+  const defaultCat = h === 'balikcilik' ? 'balik' : 'kamp';
   nearbyCat = defaultCat;
   document.querySelectorAll('.nb-tab').forEach((b) => b.classList.toggle('active', b.dataset.cat === defaultCat));
   loadAll();
@@ -274,6 +274,7 @@ function applyHobbyVisibility() {
   const h = getHobby();
   const marineCard = document.getElementById('marineCard');
   marineCard.style.display = (h === 'balikcilik') ? '' : 'none';
+  document.getElementById('balikTab').style.display = (h === 'balikcilik') ? '' : 'none';
 }
 
 // ---- Yakınımda ----
@@ -435,7 +436,7 @@ if (savedHobby) {
   applyHobbyVisibility();
   document.getElementById('hobbyGate').style.display = 'none';
   document.getElementById('mainContent').style.display = 'block';
-  nearbyCat = savedHobby === 'balikcilik' ? 'eczane' : 'kamp';
+  nearbyCat = savedHobby === 'balikcilik' ? 'balik' : 'kamp';
   document.querySelectorAll('.nb-tab').forEach((b) => b.classList.toggle('active', b.dataset.cat === nearbyCat));
   loadAll();
 } else {

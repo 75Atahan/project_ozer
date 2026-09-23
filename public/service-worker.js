@@ -1,4 +1,4 @@
-cat /home/claude/lso-app/public/service-worker.js
+const CACHE_NAME = 'lso-v7';
 const APP_SHELL = ['/', '/index.html', '/styles.css', '/app.js', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', (event) => {

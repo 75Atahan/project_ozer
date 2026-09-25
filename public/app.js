@@ -274,7 +274,6 @@ function applyHobbyVisibility() {
   const h = getHobby();
   const marineCard = document.getElementById('marineCard');
   marineCard.style.display = (h === 'balikcilik') ? '' : 'none';
-  document.getElementById('balikTab').style.display = (h === 'balikcilik') ? '' : 'none';
 }
 
 // ---- Yakınımda ----
@@ -303,7 +302,7 @@ async function loadNearby() {
     el.className = '';
     el.innerHTML = data.slice(0, 8).map((p) => `
       <a class="fin-row" style="text-decoration:none; color:inherit;" href="https://www.google.com/maps?q=${p.lat},${p.lon}" target="_blank" rel="noopener">
-        <span class="fin-name">${p.name}</span>
+        <span class="fin-name">${p.curated ? '⭐ ' : ''}${p.name}</span>
         <span class="fin-val" style="font-size:12px; color:var(--teal);">Haritada aç →</span>
       </a>
     `).join('');

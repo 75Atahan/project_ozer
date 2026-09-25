@@ -221,13 +221,29 @@ app.get('/api/geocode', async (req, res) => {
   }
 });
 
-// ---- Yakınımda (OpenStreetMap / Overpass API, key gerekmiyor) ----
+// ---- Yakınımda (OpenStreetMap / Overpass API, key gerekmiyor + kürate edilmiş liste) ----
 const NEARBY_TAGS = {
-  eczane: 'amenity=pharmacy',
-  market: 'shop=supermarket',
-  kamp: 'tourism=camp_site',
-  balik: 'leisure=fishing',
+  eczane: [['amenity', 'pharmacy']],
+  market: [['shop', 'supermarket']],
+  kamp: [['tourism', 'camp_site'], ['tourism', 'caravan_site'], ['tourism', 'camp_pitch']],
+  balik: [['leisure', 'fishing']],
 };
+
+// Bilinen ama OSM'de eksik/yanlış etiketli önemli yerler — zamanla büyüyecek bir liste.
+// Her giriş bir kategoriye ait; koordinatların 6000m yakınındaki sorgularda öne çıkar.
+const CURATED_PLACES = [
+  { category: 'kamp', name: 'Kalemlik Orman Kampı (Özdere)', lat: 38.020928, lon: 27.073405 },
+  { category: 'kamp', name: 'Gümüldür Orman Kampı', lat: 38.0767688, lon: 26.9818085 },
+  { category: 'kamp', name: 'Gümüldür Tabiat Parkı', lat: 38.0755494, lon: 26.982764 },
+  { category: 'balik', name: 'Mordoğan İskelesi', lat: 38.51825, lon: 26.62672 },
+];
+
+function curatedNearby(category, lat, lon, radiusKm) {
+  return CURATED_PLACES
+    .filter((p) => p.category === category)
+    .filter((p) => haversineKm(lat, lon, p.lat, p.lon) <= radiusKm)
+    .map((p) => ({ name: p.name, lat: p.lat, lon: p.lon, curated: true }));
+}
 
 const OVERPASS_MIRRORS = [
   'https://overpass-api.de/api/interpreter',
@@ -240,9 +256,7 @@ async function queryOverpass(query) {
   for (const mirror of OVERPASS_MIRRORS) {
     try {
       const url = `${mirror}?data=${encodeURIComponent(query)}`;
-      const r = await fetch(url, {
-        headers: { 'User-Agent': 'LSO-App/1.0 (kisisel-gundelik-asistan)' },
-      });
+      const r = await fetch(url, { headers: DEFAULT_HEADERS });
       if (!r.ok) throw new Error(`Upstream hata: ${r.status} (${mirror})`);
       return await r.json();
     } catch (err) {
@@ -256,21 +270,27 @@ app.get('/api/nearby', async (req, res) => {
   try {
     const { lat, lon, category } = req.query;
     if (!lat || !lon) return res.status(400).json({ error: 'lat ve lon zorunlu' });
-    const tag = NEARBY_TAGS[category] || NEARBY_TAGS.eczane;
-    const [key, val] = tag.split('=');
+    const tagPairs = NEARBY_TAGS[category] || NEARBY_TAGS.eczane;
+    const cat = NEARBY_TAGS[category] ? category : 'eczane';
 
-    const cacheKey = `nearby:${category}:${lat},${lon}`;
+    const curated = curatedNearby(cat, parseFloat(lat), parseFloat(lon), 12);
+
+    const cacheKey = `nearby:${cat}:${lat},${lon}`;
     const hit = cache.get(cacheKey);
     const now = Date.now();
-    if (hit && now - hit.time < CACHE_MS) return res.json(hit.data);
+    if (hit && now - hit.time < CACHE_MS) {
+      return res.json(mergeCuratedFirst(curated, hit.data));
+    }
 
-    const query = `[out:json][timeout:20];node["${key}"="${val}"](around:4000,${lat},${lon});out center 8;`;
+    const filters = tagPairs.map(([k, v]) => `node["${k}"="${v}"](around:4000,${lat},${lon});`).join('');
+    const query = `[out:json][timeout:20];(${filters});out center 8;`;
 
     let raw;
     try {
       raw = await queryOverpass(query);
     } catch (err) {
-      if (hit) return res.json(hit.data);
+      if (hit) return res.json(mergeCuratedFirst(curated, hit.data));
+      if (curated.length) return res.json(curated); // Overpass düşse bile kürate liste en azından gelsin
       throw err;
     }
 
@@ -281,11 +301,17 @@ app.get('/api/nearby', async (req, res) => {
     })).filter((p) => p.lat && p.lon);
 
     cache.set(cacheKey, { time: now, data: items });
-    res.json(items);
+    res.json(mergeCuratedFirst(curated, items));
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
 });
+
+function mergeCuratedFirst(curated, live) {
+  const curatedNames = new Set(curated.map((c) => c.name));
+  const liveFiltered = live.filter((l) => !curatedNames.has(l.name));
+  return [...curated, ...liveFiltered];
+}
 
 // ---- Statik dosyalar (PWA frontend) ----
 app.use(express.static(path.join(__dirname, 'public')));

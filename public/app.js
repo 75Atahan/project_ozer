@@ -278,6 +278,7 @@ function applyHobbyVisibility() {
 
 // ---- Yakınımda ----
 let nearbyCat = 'eczane';
+let nearbyRequestId = 0;
 function setNearbyCat(cat) {
   nearbyCat = cat;
   document.querySelectorAll('.nb-tab').forEach((b) => b.classList.toggle('active', b.dataset.cat === cat));
@@ -286,11 +287,17 @@ function setNearbyCat(cat) {
 
 async function loadNearby() {
   const el = document.getElementById('nearbyBody');
+  const myRequestId = ++nearbyRequestId;
+  const requestedCat = nearbyCat;
   el.className = 'skel';
   el.textContent = 'Yükleniyor…';
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
   try {
-    const res = await fetch(`/api/nearby?lat=${current.lat}&lon=${current.lon}&category=${nearbyCat}`);
+    const res = await fetch(`/api/nearby?lat=${current.lat}&lon=${current.lon}&category=${requestedCat}`, { signal: controller.signal });
+    clearTimeout(timeoutId);
     const data = await res.json();
+    if (myRequestId !== nearbyRequestId) return; // Bu arada başka bir sekmeye geçilmiş, bu cevap artık geçersiz
     if (data.error) throw new Error(data.error);
 
     if (data.length === 0) {
@@ -307,14 +314,22 @@ async function loadNearby() {
       </a>
     `).join('');
   } catch (err) {
+    clearTimeout(timeoutId);
+    if (myRequestId !== nearbyRequestId) return;
     el.className = 'error';
-    el.textContent = 'Yakınımda verisi alınamadı: ' + err.message;
+    const msg = err.name === 'AbortError' ? 'İstek çok uzun sürdü, tekrar dene.' : err.message;
+    el.textContent = 'Yakınımda verisi alınamadı: ' + msg;
   }
 }
 
 // ---- Hatırlatmalarım (cihazda saklanır, sunucuya gitmez) ----
 const PAY_KEY = 'lso_payments';
 const TYPE_ICON = { odeme: '💳', dogumgunu: '🎂', diger: '📌' };
+
+function formatDateTR(isoDate) {
+  const [y, m, d] = isoDate.split('-');
+  return `${d}.${m}.${y}`;
+}
 
 function getPayments() {
   try {
@@ -416,7 +431,7 @@ function renderPayments() {
     const descTxt = p.desc ? `<br><span style="color:var(--ink-soft); font-size:11.5px;">${p.desc}</span>` : '';
     return `<div class="fin-row" style="align-items:flex-start;">
       <span class="fin-name">${TYPE_ICON[p.type] || '📌'} ${p.name}${amountTxt}
-        <span style="color:var(--ink-soft);"> · ${p.date}</span>${descTxt}
+        <span style="color:var(--ink-soft);"> · ${formatDateTR(p.date)}</span>${descTxt}
       </span>
       <span style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
         <span class="fin-val" style="color:${color};">${info}</span>

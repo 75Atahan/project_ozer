@@ -256,9 +256,16 @@ async function queryOverpass(query) {
   for (const mirror of OVERPASS_MIRRORS) {
     try {
       const url = `${mirror}?data=${encodeURIComponent(query)}`;
-      const r = await fetch(url, { headers: DEFAULT_HEADERS });
-      if (!r.ok) throw new Error(`Upstream hata: ${r.status} (${mirror})`);
-      return await r.json();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      try {
+        const r = await fetch(url, { headers: DEFAULT_HEADERS, signal: controller.signal });
+        clearTimeout(timeoutId);
+        if (!r.ok) throw new Error(`Upstream hata: ${r.status} (${mirror})`);
+        return await r.json();
+      } finally {
+        clearTimeout(timeoutId);
+      }
     } catch (err) {
       lastErr = err;
     }
@@ -283,7 +290,7 @@ app.get('/api/nearby', async (req, res) => {
     }
 
     const filters = tagPairs.map(([k, v]) => `node["${k}"="${v}"](around:4000,${lat},${lon});`).join('');
-    const query = `[out:json][timeout:20];(${filters});out center 8;`;
+    const query = `[out:json][timeout:10];(${filters});out center 8;`;
 
     let raw;
     try {

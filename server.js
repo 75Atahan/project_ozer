@@ -221,7 +221,28 @@ app.get('/api/geocode', async (req, res) => {
   }
 });
 
-// ---- Yakınımda (OpenStreetMap / Overpass API, key gerekmiyor + kürate edilmiş liste) ----
+// ---- Yakınımda (Geoapify Places API — key ile; yoksa Overpass'a düşer) + kürate edilmiş liste ----
+const GEOAPIFY_KEY = process.env.GEOAPIFY_KEY || '';
+
+const GEOAPIFY_CATEGORIES = {
+  eczane: 'healthcare.pharmacy',
+  market: 'commercial.supermarket',
+  kamp: 'camping.camp_site',
+};
+
+async function queryGeoapify(category, lat, lon, radiusM) {
+  const cat = GEOAPIFY_CATEGORIES[category];
+  const url = `https://api.geoapify.com/v2/places?categories=${cat}&filter=circle:${lon},${lat},${radiusM}&limit=10&apiKey=${GEOAPIFY_KEY}`;
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`Geoapify hata: ${r.status}`);
+  const data = await r.json();
+  return (data.features || []).map((f) => ({
+    name: (f.properties && f.properties.name) || 'İsimsiz',
+    lat: f.geometry.coordinates[1],
+    lon: f.geometry.coordinates[0],
+  }));
+}
+
 const NEARBY_TAGS = {
   eczane: [['amenity', 'pharmacy']],
   market: [['shop', 'supermarket']],
@@ -277,7 +298,6 @@ app.get('/api/nearby', async (req, res) => {
   try {
     const { lat, lon, category } = req.query;
     if (!lat || !lon) return res.status(400).json({ error: 'lat ve lon zorunlu' });
-    const tagPairs = NEARBY_TAGS[category] || NEARBY_TAGS.eczane;
     const cat = NEARBY_TAGS[category] ? category : 'eczane';
 
     const curated = curatedNearby(cat, parseFloat(lat), parseFloat(lon), 12);
@@ -289,40 +309,19 @@ app.get('/api/nearby', async (req, res) => {
       return res.json(mergeCuratedFirst(curated, hit.data));
     }
 
-    const filters = tagPairs.map(([k, v]) => `node["${k}"="${v}"](around:4000,${lat},${lon});`).join('');
-    const query = `[out:json][timeout:10];(${filters});out center 8;`;
+    let items;
 
-    let raw;
-    try {
-      raw = await queryOverpass(query);
-    } catch (err) {
-      if (hit) return res.json(mergeCuratedFirst(curated, hit.data));
-      if (curated.length) return res.json(curated); // Overpass düşse bile kürate liste en azından gelsin
-      throw err;
+    // Geoapify: eczane/market/kamp için (key varsa) — hızlı ve güvenilir
+    if (GEOAPIFY_KEY && GEOAPIFY_CATEGORIES[cat]) {
+      try {
+        items = await queryGeoapify(cat, lat, lon, 4000);
+      } catch (err) {
+        items = null; // Geoapify düşerse Overpass'a düş
+      }
     }
 
-    const items = (raw.elements || []).map((el) => ({
-      name: (el.tags && el.tags.name) || 'İsimsiz',
-      lat: el.lat,
-      lon: el.lon,
-    })).filter((p) => p.lat && p.lon);
-
-    cache.set(cacheKey, { time: now, data: items });
-    res.json(mergeCuratedFirst(curated, items));
-  } catch (err) {
-    res.status(502).json({ error: err.message });
-  }
-});
-
-function mergeCuratedFirst(curated, live) {
-  const curatedNames = new Set(curated.map((c) => c.name));
-  const liveFiltered = live.filter((l) => !curatedNames.has(l.name));
-  return [...curated, ...liveFiltered];
-}
-
-// ---- Statik dosyalar (PWA frontend) ----
-app.use(express.static(path.join(__dirname, 'public')));
-
-app.listen(PORT, () => {
-  console.log(`LSÖ backend çalışıyor: http://localhost:${PORT}`);
-});
+    // Overpass: Geoapify yoksa/başarısızsa, veya "balık" gibi Geoapify'da olmayan kategoriler için
+    if (!items) {
+      const tagPairs = NEARBY_TAGS[cat];
+      const filters = tagPairs.map(([k, v]) => `node["${k}"="${v}"](around:4000,${lat},${lon});`).join('');
+      const query = `[out:json][timeout:10];

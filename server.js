@@ -324,4 +324,37 @@ app.get('/api/nearby', async (req, res) => {
     if (!items) {
       const tagPairs = NEARBY_TAGS[cat];
       const filters = tagPairs.map(([k, v]) => `node["${k}"="${v}"](around:4000,${lat},${lon});`).join('');
-      const query = `[out:json][timeout:10];
+      const query = `[out:json][timeout:10];(${filters});out center 8;`;
+      try {
+        const raw = await queryOverpass(query);
+        items = (raw.elements || []).map((el) => ({
+          name: (el.tags && el.tags.name) || 'İsimsiz',
+          lat: el.lat,
+          lon: el.lon,
+        })).filter((p) => p.lat && p.lon);
+      } catch (err) {
+        if (hit) return res.json(mergeCuratedFirst(curated, hit.data));
+        if (curated.length) return res.json(curated); // en azından kürate liste gelsin
+        throw err;
+      }
+    }
+
+    cache.set(cacheKey, { time: now, data: items });
+    res.json(mergeCuratedFirst(curated, items));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+function mergeCuratedFirst(curated, live) {
+  const curatedNames = new Set(curated.map((c) => c.name));
+  const liveFiltered = live.filter((l) => !curatedNames.has(l.name));
+  return [...curated, ...liveFiltered];
+}
+
+// ---- Statik dosyalar (PWA frontend) ----
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.listen(PORT, () => {
+  console.log(`LSÖ backend çalışıyor: http://localhost:${PORT}`);
+});
